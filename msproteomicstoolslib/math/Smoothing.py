@@ -708,7 +708,7 @@ class LocalKernel:
             if len(source_d) < 2*topN:
                 return data1[lb-topN:lb+topN], data2[lb-topN:lb+topN]
             else:
-                return source_d, target_d
+                return numpy.asarray(source_d), numpy.asarray(target_d)
 
 class WeightedNearestNeighbour(LocalKernel):
     """Class for weighted interpolation using local linear differences
@@ -727,19 +727,23 @@ class WeightedNearestNeighbour(LocalKernel):
         res = []
         for xhat_ in xhat:
 
-            source_d, target_d = self._getLocalDatapoints(self.data1, self.data2, self.topN, self.max_diff, xhat_)
+            source_d, target_d = self._getLocalDatapoints(
+                self.data1, self.data2, self.topN, self.max_diff, xhat_
+            )
 
             # Transform target data:
             #   Compute a difference array from the source and apply it to the target
             #   (local linear differences)
-            source_d_diff = [s - xhat_ for s in source_d]
-            target_data_transf = [t - s for t,s in zip(target_d, source_d_diff)]
+            source_d_diff = source_d - xhat_
+            target_data_transf = target_d - source_d_diff
 
             # Use transformed target data to compute expected RT in target domain (weighted average)
-            # EXP = 0.65 # produces slightly better results
-            EXP = 1.0
-            expected_targ = numpy.average(target_data_transf, weights=[ 1/abs(s) if s > self.min_diff else self.min_diff for s in source_d_diff])
-            expected_targ = numpy.average(target_data_transf, weights=[ 1/(abs(s)**EXP) if s > self.min_diff else self.min_diff for s in source_d_diff])
+            # EXP = - 0.65 # produces slightly better results
+            weights = 1. / numpy.clip(
+                numpy.abs(source_d_diff), self.min_diff, numpy.inf
+            )
+
+            expected_targ = numpy.average(target_data_transf, weights=weights)
 
             # Compute a measurement of dispersion, standard deviation
             self.last_dispersion = numpy.std(target_data_transf)
